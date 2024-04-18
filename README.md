@@ -1013,10 +1013,23 @@ ps:执行以上命令就会在wsl系统下，就会去拉取数据缓存到`~/.f
 
 详细操作步骤,请查看[分叉测试 - Foundry 中文文档 (learnblockchain.cn)](https://learnblockchain.cn/docs/foundry/i18n/zh/forge/fork-testing.html)
 
+#### 30)foundry fork
+描述:`anvil` 命令创建一个本地开发网节点（好像是对 hardhat node的封装 ），用于部署和测试智能合约。它也可以用来分叉其他与 EVM 兼容的网络。
+
+```
+anvil --port 端口号
+```
+
+ps: 启动本地node节点
+
+```
+anvil --fork-url=$RPC --fork-block-number=<BLOCK>
+```
+
+ps:从节点URL（需要是存档节点）fork 区块链状态，可以指定某个区块时的状态。
 
 
-
-
+#### 31)foundry fork
 整个项目可能涉及的一些命令
 
 ```shell
@@ -1027,11 +1040,16 @@ npx hardhat test
 npx hardhat node
 npx hardhat ignition deploy ./ignition/modules/Lock.js --network localhost
 npx hardhat ignition deploy ./ignition/modules/Lock.js --network 部署的网络
-npx hardhat verify 合约地址 <合约参数> --network 部署的网络
+npx hardhat verify 合约地址 <构造函数参数> --network 部署的网络
 npx hardhat coverage
-npx hardhat run ./ignition/modules/Nft/DeployNft.js --network sepolia
+npx hardhat run ./ignition/modules/Nft/DeployNft.js --network $RPC
 forge build
-forge test
-forge create 合约的路径 --constructor-args  <构造函数的参数>
-forge scrpit 
+forge test -vvvv
+forge create 合约路径 --constructor-args "构造函数参数" --rpc-url $RPC --private-key=0x私钥
+forge script 合约路径 -vvvv --rpc-url $rpc --broadcast  --private-key=0x私钥
+forge verify-contract 合约地址 合约路径 --rpc-url  $RPC --etherscan-api-key 你的etherscan-api-key
+cast call 合约地址 "合约方法" --rpc-url $RPC
+cast send 合约地址 "合约方法" --rpc-url $RPC --private-key=0x私钥
+anvil --port 端口号
+anvil --fork-url=$RPC --fork-block-number=<BLOCK>
 ```
