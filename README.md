@@ -65,10 +65,9 @@ ps:rpc节点建议用alchemy提供的
 
 ```
 require("@nomicfoundation/hardhat-toolbox");
-//require("@nomicfoundation/hardhat-foundry");
+// require("@nomicfoundation/hardhat-foundry");
 require("hardhat-gas-reporter");
 
-const fs = require("fs");
 const dotenv = require('dotenv');
 dotenv.config();
 
