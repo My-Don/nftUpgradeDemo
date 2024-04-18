@@ -24,6 +24,7 @@ npm install --save-dev hardhat
 #### 4)创建工程
 
 ```
+git init
 npx hardhat init
 ```
 
