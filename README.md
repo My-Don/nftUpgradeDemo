@@ -359,7 +359,7 @@ All files       |    60.81 |     31.9 |    55.88 |    61.86 |                |
 
 #### 15)生成gas-report报告
 
-编辑更改`.env`改成REPORT_GAS=true
+编辑`.env`改成REPORT_GAS=true
 
 执行`npx hardhat test`
 
@@ -1014,7 +1014,7 @@ ps:执行以上命令就会在wsl系统下，就会去拉取数据缓存到`~/.f
 
 详细操作步骤,请查看[分叉测试 - Foundry 中文文档 (learnblockchain.cn)](https://learnblockchain.cn/docs/foundry/i18n/zh/forge/fork-testing.html)
 
-#### 30)foundry fork
+#### 30)anvil的使用
 描述:`anvil` 命令创建一个本地开发网节点（好像是对 hardhat node的封装 ），用于部署和测试智能合约。它也可以用来分叉其他与 EVM 兼容的网络。
 
 ```
