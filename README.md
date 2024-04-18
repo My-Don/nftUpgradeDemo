@@ -24,7 +24,6 @@ npm install --save-dev hardhat
 #### 4)创建工程
 
 ```
-git init
 npx hardhat init
 ```
 
@@ -1038,11 +1037,11 @@ npx hardhat accounts
 npx hardhat compile
 npx hardhat test
 npx hardhat node
-npx hardhat ignition deploy ./ignition/modules/Lock.js --network localhost
-npx hardhat ignition deploy ./ignition/modules/Lock.js --network 部署的网络
+npx hardhat ignition deploy ./ignition/modules/XXXX.js --network localhost
+npx hardhat ignition deploy ./ignition/modules/XXXX.js --network 部署的网络
 npx hardhat verify 合约地址 <构造函数参数> --network 部署的网络
 npx hardhat coverage
-npx hardhat run ./ignition/modules/Nft/DeployNft.js --network $RPC
+npx hardhat run ./ignition/modules/XXXX.js --network $RPC
 forge build
 forge test -vvvv
 forge create 合约路径 --constructor-args "构造函数参数" --rpc-url $RPC --private-key=0x私钥
