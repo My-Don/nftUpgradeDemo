@@ -83,33 +83,6 @@ contract FactoryV3 is ReentrancyGuard {
         return erc721nfts[_owner];
     }
 
-    // functionNftAddress(uint256 _salt,bytes memory bytecode) external returns(address target) {
-    //     bytes32 salt = getSalt(_salt);
-    //     bytes32 addrHash = keccak256(abi.encodePacked(
-    //     bytes1(0xff),          
-    //     address(this),        
-    //     _salt, // 盐值
-    //     keccak256(bytecode)
-    //     ));
-    //     // 将最后 20 个字节的哈希值转换为地址
-    //     return address(uint160(uint(addrHash)));
-
-    // }
-
-    // function getByteCode(address _impl, address _proxyAdmin ,NftData memory _nftData ) internal view returns(bytes memory deployBytecode){
-    //    bytes32 salt = getSalt(_salt);
-    //    address _impl = impl.cloneDeterministic(salt);
-    //    address _proxyAdmin = create(salt, PROXYADMINCODE);
-    //    deployBytecode = abi.encodePacked(
-    //         PROXYCODE,
-    //         abi.encode(
-    //             _impl,
-    //             _proxyAdmin,
-    //             abi.encodeWithSelector(0xec5de95a,_nftData)
-    //         )
-    //     );
-    // }
-
     function preCreate(
         bool _blindBoxOpened,
         address _owner,
