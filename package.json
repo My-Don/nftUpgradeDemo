@@ -1,0 +1,21 @@
+{
+  "name": "upgradenftdemo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-foundry": "^1.1.1",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^4.7.3",
+    "@openzeppelin/contracts-upgradeable": "^4.7.3",
+    "dotenv": "^16.4.5",
+    "erc721a": "^4.2.3",
+    "erc721a-upgradeable": "^4.2.2",
+    "hardhat": "^2.22.2"
+  }
+}

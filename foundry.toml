@@ -1,0 +1,35 @@
+[profile.default]
+# 自動依照合約內容偵測所使用的 solidity compiler 版本
+#auto_detect_solc = true
+# 手动指定版本
+solc = '0.8.24'
+# 是否开启solc优化器
+optimizer = true
+# solc优化的运行次数 
+optimizer-runs = 200
+# 合约目录 
+src = 'contracts'
+# 合约编译后目录 
+out = 'artifacts/foundry/contracts'
+# 项目依赖
+libs = ['node_modules', 'lib']
+# 测试目录
+test = 'test'
+# 缓存的路径
+cache_path  = 'cache/foundry'
+# 是否忽略缓存
+force = false 
+#
+gas_reports = ["*"]
+
+[rpc_endpoints]
+local = 'http://127.0.0.1:8545'
+mainnet = 'https://eth-mainnet.g.alchemy.com/v2/<你的api-key>'
+sepolia = 'https://eth-sepolia.g.alchemy.com/v2/<你的api-key>'
+
+[etherscan]
+mainnet = { key = '<你的api-key>' }
+
+                                          
+
+
