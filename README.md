@@ -1029,8 +1029,7 @@ anvil --fork-url=$RPC --fork-block-number=<BLOCK>
 ps:从节点URL（需要是存档节点）fork 区块链状态，可以指定某个区块时的状态。
 
 
-#### 31)foundry fork
-整个项目可能涉及的一些命令
+#### 31)项目涉及的命令
 
 ```shell
 npx hardhat help
