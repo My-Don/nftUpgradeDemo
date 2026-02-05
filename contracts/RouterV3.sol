@@ -51,7 +51,6 @@ contract RouterV3 is ReentrancyGuard {
         require(success, "Withdraw failed");
     }
     
-    // 修复：每次创建都需要支付费用，并退还多余的 ETH
     function preCreate(
         bool _blindBoxOpened,
         bytes32 _newMerkle,
