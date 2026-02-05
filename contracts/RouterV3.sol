@@ -44,7 +44,6 @@ contract RouterV3 is ReentrancyGuard {
         manager = _manager;   
     }
     
-    // 修复：移除 gas 限制，使用 Address.sendValue 或直接 transfer
     function withdraw() external OnlyManager {  
         uint256 balance = address(this).balance;
         require(balance > 0, "No balance to withdraw");
