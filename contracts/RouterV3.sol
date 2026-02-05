@@ -63,12 +63,10 @@ contract RouterV3 is ReentrancyGuard {
         require(msg.sender == tx.origin, "Only EOA Caller");
         require(isFun, "Not yet open");
         
-        // 修复：每次创建都需要支付费用
         if (fee > 0) {
             require(msg.value >= fee, "Insufficient fee");
         }
         
-        // 调用 factory 创建 NFT
         (bool success, bytes memory data) = factoryV3.call(
             abi.encodeWithSelector(
                 0x8ee2d3f9,
