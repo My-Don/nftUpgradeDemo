@@ -64,7 +64,6 @@ contract FactoryV3 is ReentrancyGuard {
         require(addr != address(0), "Create2 failed");
     }
 
-    // 修复：使用 block.number 而不是 block.timestamp 配合 blockhash
     function getSalt(uint256 number) internal returns(bytes32 _salt) {
         nonce++;
         _salt = keccak256(
