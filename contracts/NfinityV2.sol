@@ -21,7 +21,7 @@ contract NfinityV2 is
     uint256 public PUBLIC_MINT_PRICE;
     uint256 public AIR_DROP;
     uint256 public MAX_NFT;
-    uint256 private airDropCount; // 重命名以更清晰
+    uint256 private airDropCount; 
     string private baseTokenURI;
     string private blindTokenURI;
     
@@ -38,7 +38,6 @@ contract NfinityV2 is
         string _symbol;
     }
     
-    // 修复：使用正确的映射来限制每个用户的铸造数量
     mapping(address => uint256) public whiteListMinted;
     mapping(address => uint256) public publicMinted;
     
@@ -66,7 +65,6 @@ contract NfinityV2 is
         
         MAX_NFT = _nftData._maxNft;
         MAX_PER_TX = _nftData._maxPerTx;
-        // 修复：使用标准的 wei 单位（10**18）而不是 10**15
         WHITE_LIST_MINT_PRICE = _nftData._whiteListMintPrice;
         PUBLIC_MINT_PRICE = _nftData._publicMintPrice;
         blindBoxOpened = _nftData._blindBoxOpened;
@@ -114,7 +112,6 @@ contract NfinityV2 is
         _burn(tokenId, false);
     }
 
-    // 修复：正确的白名单铸造逻辑
     function whiteListMint(
         address to,
         uint256 quantity,
@@ -147,7 +144,6 @@ contract NfinityV2 is
         emit WhiteListMint(to, quantity, msg.value);
     }
 
-    // 修复：正确的公开铸造逻辑
     function publicMint(address to, uint256 quantity)
         external
         payable
@@ -175,7 +171,6 @@ contract NfinityV2 is
         emit PublicMint(to, quantity, msg.value);
     }
 
-    // 修复：改进空投逻辑
     function airdrop(address[] calldata users, uint256[] calldata amounts) 
         external 
         onlyOwner 
