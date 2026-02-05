@@ -4,10 +4,12 @@ pragma solidity ^0.8.20;
 import "erc721a-upgradeable/contracts/ERC721AUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/cryptography/MerkleProofUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 contract NfinityV2 is
     ERC721AUpgradeable,
-    OwnableUpgradeable
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable
 {
     bytes32 private merkle;
     bool public publicMintSwitch;
@@ -19,10 +21,10 @@ contract NfinityV2 is
     uint256 public PUBLIC_MINT_PRICE;
     uint256 public AIR_DROP;
     uint256 public MAX_NFT;
-    uint256 private count;
-    uint256 private currentIndex;
+    uint256 private airDropCount; // 重命名以更清晰
     string private baseTokenURI;
     string private blindTokenURI;
+    
     struct NftData {
         bool _blindBoxOpened;
         bytes32 _newMerkle;
@@ -35,8 +37,15 @@ contract NfinityV2 is
         string _name;
         string _symbol;
     }
-    mapping(address => mapping(uint256 => bool)) public mintLimited;
-    event Cast(address indexed index, uint256 indexed account);
+    
+    // 修复：使用正确的映射来限制每个用户的铸造数量
+    mapping(address => uint256) public whiteListMinted;
+    mapping(address => uint256) public publicMinted;
+    
+    event Cast(address indexed user, uint256 indexed amount);
+    event WhiteListMint(address indexed user, uint256 quantity, uint256 totalPaid);
+    event PublicMint(address indexed user, uint256 quantity, uint256 totalPaid);
+    
     modifier isHuman() {
         require(_msgSender() == tx.origin, "The caller is another contract");
         _;
@@ -49,11 +58,17 @@ contract NfinityV2 is
     {
         __ERC721A_init(_nftData._name, _nftData._symbol);
         __Ownable_init();
-        //__ReentrancyGuard_init();
+        __ReentrancyGuard_init();
+        
+        require(_nftData._maxNft > 0, "Max NFT must be greater than 0");
+        require(_nftData._maxPerTx > 0, "Max per tx must be greater than 0");
+        require(_nftData._airDrop <= _nftData._maxNft, "Airdrop exceeds max NFT");
+        
         MAX_NFT = _nftData._maxNft;
         MAX_PER_TX = _nftData._maxPerTx;
-        WHITE_LIST_MINT_PRICE = _nftData._whiteListMintPrice * 10**15;
-        PUBLIC_MINT_PRICE = _nftData._publicMintPrice * 10**15;
+        // 修复：使用标准的 wei 单位（10**18）而不是 10**15
+        WHITE_LIST_MINT_PRICE = _nftData._whiteListMintPrice;
+        PUBLIC_MINT_PRICE = _nftData._publicMintPrice;
         blindBoxOpened = _nftData._blindBoxOpened;
         blindTokenURI = _nftData._blindTokenURI;
         merkle = _nftData._newMerkle;
@@ -88,91 +103,117 @@ contract NfinityV2 is
     }
 
     function withdraw() external onlyOwner {
-        payable(owner()).transfer(address(this).balance);
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No balance to withdraw");
+        (bool success, ) = owner().call{value: balance}("");
+        require(success, "Withdraw failed");
     }
 
-     function burn(uint256 tokenId) external onlyOwner {
+    function burn(uint256 tokenId) external onlyOwner {
         require(_exists(tokenId), "ERC721: Burn query for nonexistent token");
         _burn(tokenId, false);
     }
 
+    // 修复：正确的白名单铸造逻辑
     function whiteListMint(
         address to,
         uint256 quantity,
         bytes32[] memory _merkProof
-    ) external payable  isHuman {
+    ) external payable isHuman nonReentrant {
         require(whiteListSwitch, "WhiteList is not active");
+        require(quantity > 0 && quantity <= MAX_PER_TX, "Invalid quantity");
         require(
-            quantity <= MAX_PER_TX && !mintLimited[to][MAX_PER_TX],
-            "WhiteList: Max per tx amount exceeded"
+            whiteListMinted[to] + quantity <= MAX_PER_TX,
+            "WhiteList: Max per address exceeded"
         );
         require(
-            currentIndex + quantity <= MAX_NFT - AIR_DROP,
-            "WhiteList: The number cannot exceed the WhiteList limit"
+            totalSupply() + quantity <= MAX_NFT - AIR_DROP,
+            "WhiteList: Exceeds available supply"
         );
         require(
             msg.value == WHITE_LIST_MINT_PRICE * quantity,
-            "WhiteList: Not enough mint fees"
+            "WhiteList: Incorrect payment"
         );
+        
         bytes32 leaf = keccak256(abi.encodePacked(to));
         require(
             MerkleProofUpgradeable.verify(_merkProof, merkle, leaf),
             "WhiteList: Invalid proof"
         );
-        currentIndex += quantity;
-        mintLimited[to][currentIndex] = currentIndex == MAX_PER_TX
-            ? true
-            : false;
+        
+        whiteListMinted[to] += quantity;
         _safeMint(to, quantity);
+        
+        emit WhiteListMint(to, quantity, msg.value);
     }
 
-     function publicMint(address to, uint256 quantity)
+    // 修复：正确的公开铸造逻辑
+    function publicMint(address to, uint256 quantity)
         external
         payable
         isHuman
+        nonReentrant
     {
         require(publicMintSwitch, "Public mint is not active");
+        require(quantity > 0 && quantity <= MAX_PER_TX, "Invalid quantity");
         require(
-            quantity <= MAX_PER_TX && !mintLimited[to][MAX_PER_TX],
-            "PublicMint: Max per tx amount exceeded"
+            publicMinted[to] + quantity <= MAX_PER_TX,
+            "PublicMint: Max per address exceeded"
         );
         require(
-            currentIndex + quantity <= MAX_NFT - AIR_DROP,
-            "PublicMint: The number cannot exceed the publicMint limit"
+            totalSupply() + quantity <= MAX_NFT - AIR_DROP,
+            "PublicMint: Exceeds available supply"
         );
         require(
             msg.value == PUBLIC_MINT_PRICE * quantity,
-            "PublicMint: Not enough mint fees"
+            "PublicMint: Incorrect payment"
         );
-        currentIndex += quantity;
-        mintLimited[to][currentIndex] = currentIndex == MAX_PER_TX
-            ? true
-            : false;
+        
+        publicMinted[to] += quantity;
         _safeMint(to, quantity);
+        
+        emit PublicMint(to, quantity, msg.value);
     }
 
-    function airdrop(address[] calldata users,uint256[] calldata amounts) external onlyOwner {
+    // 修复：改进空投逻辑
+    function airdrop(address[] calldata users, uint256[] calldata amounts) 
+        external 
+        onlyOwner 
+        nonReentrant 
+    {
         require(airDropSwitch, "AirDrop is not active");
-        require(
-             AIR_DROP > 0 && AIR_DROP + totalSupply() <= MAX_NFT && users.length <= AIR_DROP && users.length == amounts.length && count < AIR_DROP,
-            "AirDrop: The number of people exceeds the limit"
-        );
-        uint256 len = users.length;
-        uint256 _count = count;
-        uint256 j; 
-        while(j < len){
-            _safeMint(users[j], amounts[j]);
-            _count += amounts[j];
-            emit Cast(users[j],amounts[j]);
-            unchecked {
-                j++;
-            }
+        require(users.length > 0, "Empty users array");
+        require(users.length == amounts.length, "Arrays length mismatch");
+        
+        uint256 totalAmount = 0;
+        for (uint256 i = 0; i < amounts.length; i++) {
+            require(users[i] != address(0), "Invalid user address");
+            require(amounts[i] > 0, "Invalid amount");
+            totalAmount += amounts[i];
         }
-        count = _count;
+        
+        require(
+            airDropCount + totalAmount <= AIR_DROP,
+            "AirDrop: Exceeds airdrop allocation"
+        );
+        require(
+            totalSupply() + totalAmount <= MAX_NFT,
+            "AirDrop: Exceeds max supply"
+        );
+        
+        for (uint256 j = 0; j < users.length; j++) {
+            _safeMint(users[j], amounts[j]);
+            emit Cast(users[j], amounts[j]);
+        }
+        
+        airDropCount += totalAmount;
     }
 
     function _baseURI() internal view virtual override returns (string memory) {
-        return bytes(blindTokenURI).length > 0 && blindBoxOpened ? blindTokenURI :  baseTokenURI;
+        // 修复：当盲盒未开启时使用 blindTokenURI，开启后使用 baseTokenURI
+        return blindBoxOpened && bytes(baseTokenURI).length > 0 
+            ? baseTokenURI 
+            : blindTokenURI;
     }
 
     function setBaseURI(string memory _baseUri) external onlyOwner {
@@ -188,8 +229,49 @@ contract NfinityV2 is
     {
         if (!_exists(tokenId)) revert URIQueryForNonexistentToken();
         string memory baseURI = _baseURI();
-        return bytes(baseURI).length != 0 ? string(abi.encodePacked(baseURI, _toString(tokenId),".json")) : "";
+        return bytes(baseURI).length != 0 
+            ? string(abi.encodePacked(baseURI, _toString(tokenId), ".json")) 
+            : "";
     }
-
-
+    
+    // 添加辅助函数以查看铸造状态
+    function getMintStatus(address user) 
+        external 
+        view 
+        returns (
+            uint256 whiteListMintedAmount,
+            uint256 publicMintedAmount,
+            uint256 remainingWhiteList,
+            uint256 remainingPublic
+        ) 
+    {
+        whiteListMintedAmount = whiteListMinted[user];
+        publicMintedAmount = publicMinted[user];
+        remainingWhiteList = MAX_PER_TX > whiteListMintedAmount 
+            ? MAX_PER_TX - whiteListMintedAmount 
+            : 0;
+        remainingPublic = MAX_PER_TX > publicMintedAmount 
+            ? MAX_PER_TX - publicMintedAmount 
+            : 0;
+    }
+    
+    function getContractStatus() 
+        external 
+        view 
+        returns (
+            uint256 currentSupply,
+            uint256 maxSupply,
+            uint256 remainingForSale,
+            uint256 airDropUsed,
+            uint256 airDropRemaining
+        ) 
+    {
+        currentSupply = totalSupply();
+        maxSupply = MAX_NFT;
+        remainingForSale = MAX_NFT > AIR_DROP + currentSupply 
+            ? MAX_NFT - AIR_DROP - currentSupply 
+            : 0;
+        airDropUsed = airDropCount;
+        airDropRemaining = AIR_DROP > airDropCount ? AIR_DROP - airDropCount : 0;
+    }
 }
