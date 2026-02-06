@@ -5,14 +5,6 @@ const fs = require("fs");
 const path = require("path");
 const dotenv = require('dotenv');
 
-// 构造出.env*文件的绝对路径
-// const appDirectory = fs.realpathSync(process.cwd());
-// const resolveApp = (relativePath) => path.resolve(appDirectory, relativePath);
-// const pathsDotenv = resolveApp(".env");
-
-// 加载.env.example文件
-//dotenv.config({ path: `${pathsDotenv}.example` });
-
 dotenv.config();
 
 
