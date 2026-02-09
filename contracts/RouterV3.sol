@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
-import "./interfaces/IFactoryV3.sol";
 
 /**
  * @title RouterV3
@@ -151,7 +150,7 @@ contract RouterV3 is ReentrancyGuard, Pausable {
      * @param _name NFT 名称
      * @param _symbol NFT 符号
      * @return _nft 新创建的 NFT 合约地址
-     * @dev 🔧 修复：使用接口代替硬编码选择器，改进错误处理
+     * @dev 🔧 改进：保留硬编码但改进错误处理和安全性
      */
     function preCreate(
         bool _blindBoxOpened,
@@ -170,37 +169,49 @@ contract RouterV3 is ReentrancyGuard, Pausable {
         // 验证费用
         if (msg.value < fee) revert InsufficientFee();
 
-        // 🔧 修复：使用接口调用代替硬编码选择器
-        try IFactoryV3(factoryV3).preCreate(
-            _blindBoxOpened,
-            msg.sender,
-            _newMerkle,
-            arr,
-            _blindTokenURI,
-            _name,
-            _symbol
-        ) returns (address nftAddress) {
-            _nft = nftAddress;
-        } catch Error(string memory reason) {
-            revert(reason);
-        } catch (bytes memory lowLevelData) {
-            // 处理低级错误
-            if (lowLevelData.length > 0) {
+        // 🔧 改进：先更新状态（CEI 模式）
+        totalNftsCreated++;
+        totalFeesCollected += fee;
+
+        // 调用 Factory 的 preCreate 函数（硬编码选择器 0x8ee2d3f9）
+        (bool success, bytes memory data) = factoryV3.call(
+            abi.encodeWithSelector(
+                0x8ee2d3f9,
+                _blindBoxOpened,
+                msg.sender,
+                _newMerkle,
+                arr,
+                _blindTokenURI,
+                _name,
+                _symbol
+            )
+        );
+
+        // 改进的错误处理
+        if (!success) {
+            // 如果失败，回滚状态
+            totalNftsCreated--;
+            totalFeesCollected -= fee;
+            
+            // 返回详细错误信息
+            if (data.length > 0) {
                 assembly {
-                    let returndata_size := mload(lowLevelData)
-                    revert(add(32, lowLevelData), returndata_size)
+                    let returndata_size := mload(data)
+                    revert(add(32, data), returndata_size)
                 }
             } else {
                 revert CreationFailed();
             }
         }
 
+        // 验证返回数据
+        if (data.length != 32) revert InvalidReturnData();
+        
+        // 解码返回的 NFT 地址
+        (_nft) = abi.decode(data, (address));
+        
         // 验证返回地址有效
         if (_nft == address(0)) revert InvalidReturnData();
-
-        // 🔧 改进：遵循 CEI 模式，先更新状态再退款
-        totalNftsCreated++;
-        totalFeesCollected += fee;
 
         // 退还多余的 ETH
         if (msg.value > fee) {
@@ -217,10 +228,16 @@ contract RouterV3 is ReentrancyGuard, Pausable {
      * @notice 获取用户创建的所有 NFT 合约
      * @param owner 用户地址
      * @return nft NFT 合约地址数组
-     * @dev 🔧 修复：使用接口代替硬编码选择器
+     * @dev 🔧 改进：保留硬编码但改进错误处理
      */
     function getOwnerNft(address owner) external view returns (address[] memory nft) {
-        return IFactoryV3(factoryV3).getOwnerNft(owner);
+        // 调用 Factory 的 getOwnerNft 函数（硬编码选择器 0xe99367c2）
+        (bool success, bytes memory data) = factoryV3.staticcall(
+            abi.encodeWithSelector(0xe99367c2, owner)
+        );
+        
+        require(success && data.length > 0, "Get owned nft failed");
+        nft = abi.decode(data, (address[]));
     }
 
     /**
