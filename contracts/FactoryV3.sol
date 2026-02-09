@@ -25,10 +25,10 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
     mapping(address => address[]) private erc721nfts;
     mapping(address => uint256) public userNftCount;
     
-    // 🔧 新增：NFT 合约验证
+    // NFT 合约验证
     mapping(address => bool) public isValidNft;
     
-    // 🔧 新增：统计数据
+    // 统计数据
     uint256 public totalNftsCreated;
 
     struct NftData {
