@@ -92,7 +92,6 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
     /**
      * @notice 初始化路由地址
      * @param _router 路由合约地址
-     * @dev 🔧 改进：使用 Ownable 代替自定义 manager
      */
     function onlyInitialize(address _router) external onlyOwner {
         if (router != address(0)) revert AlreadyInitialized();
