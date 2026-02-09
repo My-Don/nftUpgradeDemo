@@ -2,55 +2,157 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
+import "./interfaces/IFactoryV3.sol";
 
-contract RouterV3 is ReentrancyGuard {
-    address internal immutable factoryV3;
-    address internal manager;
+/**
+ * @title RouterV3
+ * @notice NFT 创建路由合约
+ * @dev 🔧 改进：添加暂停功能、使用接口、改进安全性
+ */
+contract RouterV3 is ReentrancyGuard, Pausable {
+    using Address for address payable;
+
+    // ============ 状态变量 ============
+    
+    address public immutable factoryV3;
+    address public manager;
     bool public isFun;
     uint256 public fee;
+
+    // 🔧 新增：费用上限（防止设置过高费用）
+    uint256 public constant MAX_FEE = 1 ether;
+
+    // 🔧 新增：统计数据
+    uint256 public totalNftsCreated;
+    uint256 public totalFeesCollected;
+
+    // ============ 自定义错误 ============
     
-    modifier OnlyManager() {
-        require(msg.sender == manager, "Only Manager");
-        _;
-    }
+    error OnlyManager();
+    error InvalidAddress();
+    error NotYetOpen();
+    error InsufficientFee();
+    error NoBalance();
+    error TransferFailed();
+    error OnlyEOA();
+    error CreationFailed();
+    error InvalidReturnData();
+    error FeeTooHigh();
+
+    // ============ 事件 ============
     
-    event ChangeManger(address indexed newManger, address oldManager);
+    event ChangeManger(address indexed newManger, address indexed oldManager);
     event ChangeFee(uint256 indexed newFee, uint256 indexed oldFee);
     event ChangeFun(bool indexed newFun, bool indexed oldFun);
-    event NftCreated(address indexed creator, address indexed nft, uint256 feePaid);
+    event NftCreated(
+        address indexed creator, 
+        address indexed nft, 
+        uint256 feePaid,
+        uint256 timestamp
+    );
+    event FeeWithdrawn(address indexed to, uint256 amount);
+
+    // ============ 修饰符 ============
+    
+    modifier onlyManager() {
+        if (msg.sender != manager) revert OnlyManager();
+        _;
+    }
+
+    // ============ 构造函数 ============
     
     constructor(address _factoryV3) {
-        require(_factoryV3 != address(0), "Invalid factory address");
+        if (_factoryV3 == address(0)) revert InvalidAddress();
+        
+        // 🔧 新增：验证 factory 是否为合约
+        if (_factoryV3.code.length == 0) revert InvalidAddress();
+        
         factoryV3 = _factoryV3;
         manager = msg.sender;
         isFun = true;
+        
         emit ChangeManger(manager, address(0));
         emit ChangeFun(isFun, false);
     }
+
+    // ============ 管理员函数 ============
     
-    function setFee(uint256 _fee) external OnlyManager {
-        emit ChangeFee(_fee, fee);
+    /**
+     * @notice 设置创建费用
+     * @param _fee 新费用
+     * @dev 🔧 修复：添加费用上限检查
+     */
+    function setFee(uint256 _fee) external onlyManager {
+        if (_fee > MAX_FEE) revert FeeTooHigh();
+        
+        uint256 oldFee = fee;
         fee = _fee;
+        
+        emit ChangeFee(_fee, oldFee);
     }
-    
-    function setFun(bool _isFun) external OnlyManager {
-        emit ChangeFun(_isFun, isFun);
-        isFun = _isFun;     
+
+    /**
+     * @notice 设置功能开关
+     * @param _isFun 是否开启
+     */
+    function setFun(bool _isFun) external onlyManager {
+        bool oldFun = isFun;
+        isFun = _isFun;
+        
+        emit ChangeFun(_isFun, oldFun);
     }
-    
-    function setManager(address _manager) external OnlyManager {
-        require(_manager != address(0), "Invalid manager address");
-        emit ChangeManger(_manager, manager);
-        manager = _manager;   
+
+    /**
+     * @notice 转移管理员权限
+     * @param _manager 新管理员地址
+     */
+    function setManager(address _manager) external onlyManager {
+        if (_manager == address(0)) revert InvalidAddress();
+        
+        address oldManager = manager;
+        manager = _manager;
+        
+        emit ChangeManger(_manager, oldManager);
     }
-    
-    function withdraw() external OnlyManager {  
+
+    /**
+     * @notice 提取费用
+     * @dev 🔧 修复：使用 Address.sendValue 代替低级 call
+     */
+    function withdraw() external onlyManager nonReentrant {
         uint256 balance = address(this).balance;
-        require(balance > 0, "No balance to withdraw");
-        (bool success, ) = manager.call{value: balance}("");
-        require(success, "Withdraw failed");
+        if (balance == 0) revert NoBalance();
+        
+        // 使用 OpenZeppelin 的安全转账方法
+        payable(manager).sendValue(balance);
+        
+        emit FeeWithdrawn(manager, balance);
     }
+
+    // 🔧 新增：紧急暂停功能
+    function pause() external onlyManager {
+        _pause();
+    }
+
+    function unpause() external onlyManager {
+        _unpause();
+    }
+
+    // ============ 核心功能 ============
     
+    /**
+     * @notice 创建新的 NFT 合约
+     * @param _blindBoxOpened 盲盒是否开启
+     * @param _newMerkle Merkle 根
+     * @param arr 配置参数 [salt, whiteListPrice, publicPrice, maxNft, maxPerTx, airDrop]
+     * @param _blindTokenURI 盲盒 URI
+     * @param _name NFT 名称
+     * @param _symbol NFT 符号
+     * @return _nft 新创建的 NFT 合约地址
+     * @dev 🔧 修复：使用接口代替硬编码选择器，改进错误处理
+     */
     function preCreate(
         bool _blindBoxOpened,
         bytes32 _newMerkle,
@@ -58,59 +160,90 @@ contract RouterV3 is ReentrancyGuard {
         string calldata _blindTokenURI,
         string calldata _name,
         string calldata _symbol
-    ) external payable nonReentrant returns (address _nft) {
-        require(msg.sender == tx.origin, "Only EOA Caller");
-        require(isFun, "Not yet open");
+    ) external payable nonReentrant whenNotPaused returns (address _nft) {
+        // 验证调用者是 EOA
+        if (msg.sender != tx.origin) revert OnlyEOA();
         
-        if (fee > 0) {
-            require(msg.value >= fee, "Insufficient fee");
-        }
+        // 验证功能已开启
+        if (!isFun) revert NotYetOpen();
         
-        (bool success, bytes memory data) = factoryV3.call(
-            abi.encodeWithSelector(
-                0x8ee2d3f9,
-                _blindBoxOpened,
-                msg.sender,
-                _newMerkle,
-                arr,
-                _blindTokenURI,
-                _name,
-                _symbol
-            )
-        );
-        
-        if (!success) {
-            // 如果失败，返回错误信息
-            if (data.length > 0) {
+        // 验证费用
+        if (msg.value < fee) revert InsufficientFee();
+
+        // 🔧 修复：使用接口调用代替硬编码选择器
+        try IFactoryV3(factoryV3).preCreate(
+            _blindBoxOpened,
+            msg.sender,
+            _newMerkle,
+            arr,
+            _blindTokenURI,
+            _name,
+            _symbol
+        ) returns (address nftAddress) {
+            _nft = nftAddress;
+        } catch Error(string memory reason) {
+            revert(reason);
+        } catch (bytes memory lowLevelData) {
+            // 处理低级错误
+            if (lowLevelData.length > 0) {
                 assembly {
-                    let ptr := mload(0x40)
-                    let size := returndatasize()
-                    returndatacopy(ptr, 0, size)
-                    revert(ptr, size)
+                    let returndata_size := mload(lowLevelData)
+                    revert(add(32, lowLevelData), returndata_size)
                 }
             } else {
-                revert("Creation failed");
+                revert CreationFailed();
             }
         }
-        
-        require(data.length == 32, "Invalid return data");
-        (_nft) = abi.decode(data, (address));
-        
-        // 修复：退还多余的 ETH
+
+        // 验证返回地址有效
+        if (_nft == address(0)) revert InvalidReturnData();
+
+        // 🔧 改进：遵循 CEI 模式，先更新状态再退款
+        totalNftsCreated++;
+        totalFeesCollected += fee;
+
+        // 退还多余的 ETH
         if (msg.value > fee) {
             uint256 refund = msg.value - fee;
-            (bool refundSuccess, ) = msg.sender.call{value: refund}("");
-            require(refundSuccess, "Refund failed");
+            payable(msg.sender).sendValue(refund);
         }
-        
-        emit NftCreated(msg.sender, _nft, fee);
+
+        emit NftCreated(msg.sender, _nft, fee, block.timestamp);
     }
+
+    // ============ 查询函数 ============
     
-    function getOwnerNft(address owner) external view returns(address[] memory nft) {
-        (bool success, bytes memory data) = factoryV3.staticcall(
-            abi.encodeWithSelector(0xe99367c2, owner)
-        );
-        require(success && data.length > 0, "Get owned nft failed");
-        nft = abi.decode(data, (address[]));
+    /**
+     * @notice 获取用户创建的所有 NFT 合约
+     * @param owner 用户地址
+     * @return nft NFT 合约地址数组
+     * @dev 🔧 修复：使用接口代替硬编码选择器
+     */
+    function getOwnerNft(address owner) external view returns (address[] memory nft) {
+        return IFactoryV3(factoryV3).getOwnerNft(owner);
     }
+
+    /**
+     * @notice 获取合约统计信息
+     * @return _totalNftsCreated 总创建数量
+     * @return _totalFeesCollected 总收集费用
+     * @return _currentFee 当前费用
+     * @return _isActive 是否激活
+     */
+    function getStats() 
+        external 
+        view 
+        returns (
+            uint256 _totalNftsCreated,
+            uint256 _totalFeesCollected,
+            uint256 _currentFee,
+            bool _isActive
+        ) 
+    {
+        return (totalNftsCreated, totalFeesCollected, fee, isFun && !paused());
+    }
+
+    // ============ 接收 ETH ============
+    
+    receive() external payable {}
 }
