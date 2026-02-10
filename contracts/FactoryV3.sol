@@ -106,7 +106,6 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
         if (router != address(0)) revert AlreadyInitialized();
         if (_router == address(0)) revert InvalidAddress();
         
-        // 验证 router 是合约
         if (_router.code.length == 0) revert InvalidAddress();
         
         router = _router;
