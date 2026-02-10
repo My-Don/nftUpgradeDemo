@@ -91,7 +91,6 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
         PROXY_ADMIN_BYTECODE = type(ProxyAdmin).creationCode;
         TRANSPARENT_PROXY_BYTECODE = type(TransparentUpgradeableProxy).creationCode;
         
-        // 部署实现合约
         impl = address(new NfinityV2());
         if (impl == address(0)) revert ImplementationCreationFailed();
     }
