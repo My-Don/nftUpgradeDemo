@@ -39,7 +39,7 @@ contract NfinityV2 is
     string private baseTokenURI;
     string private blindTokenURI;
 
-    // 🔧 新增：价格上限常量（防止设置过高价格）
+    // 价格上限常量（防止设置过高价格）
     uint256 public constant MAX_MINT_PRICE = 10 ether;
     
     struct NftData {
@@ -60,7 +60,6 @@ contract NfinityV2 is
 
     // ============ 事件 ============
     
-    // 🔧 改进：添加更多信息到事件
     event Cast(
         address indexed user, 
         uint256 indexed amount, 
@@ -81,7 +80,6 @@ contract NfinityV2 is
         uint256 startTokenId
     );
     
-    // 🔧 新增：配置变更事件
     event MerkleUpdated(bytes32 indexed oldMerkle, bytes32 indexed newMerkle);
     event PriceUpdated(string priceType, uint256 oldPrice, uint256 newPrice);
     event BaseURIUpdated(string newBaseURI);
@@ -104,11 +102,7 @@ contract NfinityV2 is
     error MerkleCannotBeZero();
     error PriceTooHigh();
 
-    // ============ 修饰符 ============
     
-    // 🔧 移除 isHuman 修饰符（会阻止智能钱包）
-    // 如果需要防止合约调用，建议使用其他机制
-
     // ============ 初始化函数 ============
     
     /**
@@ -123,9 +117,9 @@ contract NfinityV2 is
         __ERC721A_init(_nftData._name, _nftData._symbol);
         __Ownable_init();
         __ReentrancyGuard_init();
-        __Pausable_init();  // 🔧 新增
+        __Pausable_init();  
 
-        // 🔧 改进：更严格的参数验证
+        // 参数验证
         if (_nftData._maxNft == 0) revert InvalidConfiguration();
         if (_nftData._maxPerTx == 0) revert InvalidConfiguration();
         if (_nftData._airDrop > _nftData._maxNft) revert InvalidConfiguration();
@@ -174,7 +168,7 @@ contract NfinityV2 is
      * @param _newMerkle 新的 Merkle 根
      */
     function updateMerkle(bytes32 _newMerkle) external onlyOwner {
-        // 🔧 修复：验证 Merkle 根不能为零
+        // 验证 Merkle 根不能为零
         if (_newMerkle == bytes32(0)) revert MerkleCannotBeZero();
         
         bytes32 oldMerkle = merkle;
@@ -184,7 +178,7 @@ contract NfinityV2 is
 
     /**
      * @notice 提取合约余额
-     * @dev 🔧 修复：使用安全的转账方法代替低级 call
+     * @dev 使用安全的转账方法代替低级 call
      */
     function withdraw() external onlyOwner nonReentrant {
         uint256 balance = address(this).balance;
@@ -198,19 +192,19 @@ contract NfinityV2 is
     /**
      * @notice 销毁 NFT
      * @param tokenId 要销毁的 token ID
-     * @dev 🔧 修复：只有 token 持有者可以销毁自己的 NFT
+     * @dev 只有 token 持有者可以销毁自己的 NFT
      */
     function burn(uint256 tokenId) external {
         // 检查 token 是否存在
         if (!_exists(tokenId)) revert TokenDoesNotExist();
         
-        // 🔧 修复：只有持有者可以销毁
+        // 只有持有者可以销毁
         if (_msgSender() != ownerOf(tokenId)) revert NotTokenOwner();
         
         _burn(tokenId, false);
     }
 
-    // 🔧 新增：紧急暂停功能
+    // 紧急暂停功能
     function pause() external onlyOwner {
         _pause();
     }
@@ -231,12 +225,12 @@ contract NfinityV2 is
         address to,
         uint256 quantity,
         bytes32[] memory _merkProof
-    ) external payable nonReentrant whenNotPaused {  // 🔧 新增 whenNotPaused
+    ) external payable nonReentrant whenNotPaused {  
         if (!whiteListSwitch) revert MintNotActive();
         if (quantity == 0 || quantity > MAX_PER_TX) revert InvalidQuantity();
         if (whiteListMinted[to] + quantity > MAX_PER_TX) revert ExceedsMaxPerAddress();
         
-        // 🔧 修复：改进供应量检查逻辑
+        // 供应量检查逻辑
         uint256 availableSupply = MAX_NFT - AIR_DROP;
         if (totalSupply() + quantity > availableSupply) revert ExceedsAvailableSupply();
         
@@ -261,13 +255,13 @@ contract NfinityV2 is
         external
         payable
         nonReentrant
-        whenNotPaused  // 🔧 新增 whenNotPaused
+        whenNotPaused  
     {
         if (!publicMintSwitch) revert MintNotActive();
         if (quantity == 0 || quantity > MAX_PER_TX) revert InvalidQuantity();
         if (publicMinted[to] + quantity > MAX_PER_TX) revert ExceedsMaxPerAddress();
         
-        // 🔧 修复：改进供应量检查逻辑
+        // 供应量检查逻辑
         uint256 availableSupply = MAX_NFT - AIR_DROP;
         if (totalSupply() + quantity > availableSupply) revert ExceedsAvailableSupply();
         
@@ -284,13 +278,12 @@ contract NfinityV2 is
      * @notice 空投 NFT
      * @param users 接收地址数组
      * @param amounts 数量数组
-     * @dev 🔧 修复：改进空投计数逻辑
      */
     function airdrop(address[] calldata users, uint256[] calldata amounts)
         external
         onlyOwner
         nonReentrant
-        whenNotPaused  // 🔧 新增 whenNotPaused
+        whenNotPaused  
     {
         if (!airDropSwitch) revert MintNotActive();
         if (users.length == 0) revert InvalidConfiguration();
@@ -305,11 +298,11 @@ contract NfinityV2 is
             unchecked { ++i; }  // 🔧 优化：使用 unchecked
         }
 
-        // 🔧 修复：先检查总量
+        // 先检查总量
         if (airDropCount + totalAmount > AIR_DROP) revert ExceedsAvailableSupply();
         if (totalSupply() + totalAmount > MAX_NFT) revert ExceedsAvailableSupply();
 
-        // 🔧 修复：每次成功铸造后立即更新计数
+        // 每次成功铸造后立即更新计数
         for (uint256 j = 0; j < users.length; ) {
             uint256 startTokenId = _nextTokenId();
             _safeMint(users[j], amounts[j]);
@@ -392,7 +385,6 @@ contract NfinityV2 is
         currentSupply = totalSupply();
         maxSupply = MAX_NFT;
         
-        // 🔧 修复：改进计算逻辑
         uint256 availableForSale = MAX_NFT > AIR_DROP ? MAX_NFT - AIR_DROP : 0;
         remainingForSale = availableForSale > currentSupply 
             ? availableForSale - currentSupply 
@@ -402,12 +394,12 @@ contract NfinityV2 is
         airDropRemaining = AIR_DROP > airDropCount ? AIR_DROP - airDropCount : 0;
     }
 
-    // 🔧 新增：获取当前 Merkle 根（用于验证）
+    // 获取当前 Merkle 根
     function getMerkleRoot() external view returns (bytes32) {
         return merkle;
     }
 
-    // 🔧 新增：批量查询 token 持有者
+    // 批量查询 token 持有者
     function getTokenOwners(uint256[] calldata tokenIds) 
         external 
         view 
