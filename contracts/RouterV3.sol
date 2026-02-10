@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 
 /**
  * @title RouterV3
  * @notice NFT 创建路由合约
+ * @dev 🔧 改进：添加暂停功能、改进安全性（保留硬编码选择器）
  */
 contract RouterV3 is ReentrancyGuard, Pausable {
 
@@ -17,10 +18,10 @@ contract RouterV3 is ReentrancyGuard, Pausable {
     bool public isFun;
     uint256 public fee;
 
-    // 费用上限
+    // 🔧 新增：费用上限（防止设置过高费用）
     uint256 public constant MAX_FEE = 1 ether;
 
-    // 统计数据
+    // 🔧 新增：统计数据
     uint256 public totalNftsCreated;
     uint256 public totalFeesCollected;
 
@@ -56,11 +57,13 @@ contract RouterV3 is ReentrancyGuard, Pausable {
         if (msg.sender != manager) revert OnlyManager();
         _;
     }
- 
+
+    // ============ 构造函数 ============
+    
     constructor(address _factoryV3) {
         if (_factoryV3 == address(0)) revert InvalidAddress();
         
-        // 验证 factory 是否为合约
+        // 🔧 新增：验证 factory 是否为合约
         if (_factoryV3.code.length == 0) revert InvalidAddress();
         
         factoryV3 = _factoryV3;
@@ -76,6 +79,7 @@ contract RouterV3 is ReentrancyGuard, Pausable {
     /**
      * @notice 设置创建费用
      * @param _fee 新费用
+     * @dev 🔧 修复：添加费用上限检查
      */
     function setFee(uint256 _fee) external onlyManager {
         if (_fee > MAX_FEE) revert FeeTooHigh();
@@ -112,6 +116,7 @@ contract RouterV3 is ReentrancyGuard, Pausable {
 
     /**
      * @notice 提取费用
+     * @dev 🔧 修复：使用安全的转账方法代替低级 call
      */
     function withdraw() external onlyManager nonReentrant {
         uint256 balance = address(this).balance;
@@ -124,7 +129,7 @@ contract RouterV3 is ReentrancyGuard, Pausable {
         emit FeeWithdrawn(manager, balance);
     }
 
-    // 紧急暂停
+    // 🔧 新增：紧急暂停功能
     function pause() external onlyManager {
         _pause();
     }
@@ -144,6 +149,7 @@ contract RouterV3 is ReentrancyGuard, Pausable {
      * @param _name NFT 名称
      * @param _symbol NFT 符号
      * @return _nft 新创建的 NFT 合约地址
+     * @dev 🔧 改进：保留硬编码但改进错误处理和安全性
      */
     function preCreate(
         bool _blindBoxOpened,
@@ -153,6 +159,7 @@ contract RouterV3 is ReentrancyGuard, Pausable {
         string calldata _name,
         string calldata _symbol
     ) external payable nonReentrant whenNotPaused returns (address _nft) {
+        // 验证调用者是 EOA
         if (msg.sender != tx.origin) revert OnlyEOA();
         
         // 验证功能已开启
@@ -161,10 +168,11 @@ contract RouterV3 is ReentrancyGuard, Pausable {
         // 验证费用
         if (msg.value < fee) revert InsufficientFee();
 
-        // 先更新状态
+        // 🔧 改进：先更新状态（CEI 模式）
         totalNftsCreated++;
         totalFeesCollected += fee;
 
+        // 调用 Factory 的 preCreate 函数（硬编码选择器 0x8ee2d3f9）
         (bool success, bytes memory data) = factoryV3.call(
             abi.encodeWithSelector(
                 0x8ee2d3f9,
@@ -178,7 +186,7 @@ contract RouterV3 is ReentrancyGuard, Pausable {
             )
         );
 
-        // 改进错误处理
+        // 改进的错误处理
         if (!success) {
             // 如果失败，回滚状态
             totalNftsCreated--;
@@ -220,8 +228,10 @@ contract RouterV3 is ReentrancyGuard, Pausable {
      * @notice 获取用户创建的所有 NFT 合约
      * @param owner 用户地址
      * @return nft NFT 合约地址数组
+     * @dev 🔧 改进：保留硬编码但改进错误处理
      */
     function getOwnerNft(address owner) external view returns (address[] memory nft) {
+        // 调用 Factory 的 getOwnerNft 函数（硬编码选择器 0xe99367c2）
         (bool success, bytes memory data) = factoryV3.staticcall(
             abi.encodeWithSelector(0xe99367c2, owner)
         );
