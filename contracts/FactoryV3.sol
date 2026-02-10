@@ -31,7 +31,7 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
     // 统计数据
     uint256 public totalNftsCreated;
     
-    // 🔧 优化：将 bytecode 存储为内部变量（构造时初始化一次，节省每次调用的 gas）
+    // 将 bytecode 存储为内部变量（构造时初始化一次，节省每次调用的 gas）
     // 注意：ProxyAdmin 和 NfinityV2 是可升级合约，不能用 constant
     bytes internal PROXY_ADMIN_BYTECODE;
     bytes internal TRANSPARENT_PROXY_BYTECODE;
