@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "erc721a-upgradeable/contracts/ERC721AUpgradeable.sol";
+import "erc721a-upgradeable/contracts/ERC721A__InitializableStorage.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
@@ -21,10 +22,8 @@ contract NfinityV2 is
     PausableUpgradeable  
 {
 
-    // ============ 状态变量 ============
-    
+    // ============ 状态变量 ============   
     bytes32 private merkle;
-    
     bool public publicMintSwitch;
     bool public whiteListSwitch;
     bool public airDropSwitch;
@@ -40,7 +39,7 @@ contract NfinityV2 is
     string private baseTokenURI;
     string private blindTokenURI;
 
-    // 价格上限常量
+    // 价格上限常量（防止设置过高价格）
     uint256 public constant MAX_MINT_PRICE = 10 ether;
     
     struct NftData {
@@ -59,9 +58,6 @@ contract NfinityV2 is
     mapping(address => uint256) public whiteListMinted;
     mapping(address => uint256) public publicMinted;
 
-    // ============ 事件 ============
-    
-    // 添加更多信息到事件
     event Cast(
         address indexed user, 
         uint256 indexed amount, 
@@ -81,8 +77,7 @@ contract NfinityV2 is
         uint256 totalPaid,
         uint256 startTokenId
     );
-    
-    // 配置变更事件
+
     event MerkleUpdated(bytes32 indexed oldMerkle, bytes32 indexed newMerkle);
     event PriceUpdated(string priceType, uint256 oldPrice, uint256 newPrice);
     event BaseURIUpdated(string newBaseURI);
@@ -105,8 +100,6 @@ contract NfinityV2 is
     error MerkleCannotBeZero();
     error PriceTooHigh();
 
-
-    // ============ 初始化函数 ============
     
     /**
      * @notice 初始化合约
@@ -114,13 +107,21 @@ contract NfinityV2 is
      */
     function initialize(NftData memory _nftData)
         public
-        initializerERC721A
+        initializer
     {
-        __ERC721A_init(_nftData._name, _nftData._symbol);
+        // 手动设置ERC721A的初始化状态
+        ERC721A__InitializableStorage.layout()._initialized = true;
+        ERC721A__InitializableStorage.layout()._initializing = true;
+        
+        // 调用各个初始化函数
         __Ownable_init(msg.sender);
         __ReentrancyGuard_init();
-        __Pausable_init(); 
-
+        __Pausable_init();
+        
+        // 直接设置ERC721A的名称和符号，跳过__ERC721A_init调用
+        ERC721AStorage.layout()._name = _nftData._name;
+        ERC721AStorage.layout()._symbol = _nftData._symbol;
+        
         // 参数验证
         if (_nftData._maxNft == 0) revert InvalidConfiguration();
         if (_nftData._maxPerTx == 0) revert InvalidConfiguration();
@@ -137,6 +138,9 @@ contract NfinityV2 is
         blindTokenURI = _nftData._blindTokenURI;
         merkle = _nftData._newMerkle;
         AIR_DROP = _nftData._airDrop;
+        
+        // 重置ERC721A的初始化状态
+        ERC721A__InitializableStorage.layout()._initializing = false;
     }
 
     // ============ 管理员函数 ============
@@ -184,8 +188,6 @@ contract NfinityV2 is
     function withdraw() external onlyOwner nonReentrant {
         uint256 balance = address(this).balance;
         if (balance == 0) revert NoBalance();
-        
-        // 使用安全的转账方法
         (bool success, ) = payable(owner()).call{value: balance}("");
         if (!success) revert TransferFailed();
     }
@@ -255,13 +257,13 @@ contract NfinityV2 is
         external
         payable
         nonReentrant
-        whenNotPaused  // whenNotPaused
+        whenNotPaused  
     {
         if (!publicMintSwitch) revert MintNotActive();
         if (quantity == 0 || quantity > MAX_PER_TX) revert InvalidQuantity();
         if (publicMinted[to] + quantity > MAX_PER_TX) revert ExceedsMaxPerAddress();
         
-        // 进供应量检查
+        // 供应量检查逻辑
         uint256 availableSupply = MAX_NFT - AIR_DROP;
         if (totalSupply() + quantity > availableSupply) revert ExceedsAvailableSupply();
         
@@ -295,7 +297,7 @@ contract NfinityV2 is
             if (amounts[i] == 0) revert InvalidQuantity();
             totalAmount += amounts[i];
             
-            unchecked { ++i; }  // 使用 unchecked
+            unchecked { ++i; }  
         }
 
         // 检查总量
