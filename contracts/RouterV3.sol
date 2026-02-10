@@ -120,7 +120,6 @@ contract RouterV3 is ReentrancyGuard, Pausable {
         uint256 balance = address(this).balance;
         if (balance == 0) revert NoBalance();
         
-        // 使用安全的转账方法
         (bool success, ) = payable(manager).call{value: balance}("");
         if (!success) revert TransferFailed();
         
