@@ -11,7 +11,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 /**
  * @title FactoryV3
  * @notice NFT 合约工厂
- * @dev 🔧 改进：优化存储、改进安全性、使用接口
  */
 contract FactoryV3 is ReentrancyGuard, Ownable {
     using Clones for address;
@@ -23,14 +22,13 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
     
     uint256 private nonce;
     
-    // 🔧 改进：使用 mapping 代替数组存储（节省 gas）
     mapping(address => address[]) private erc721nfts;
     mapping(address => uint256) public userNftCount;
     
-    // 🔧 新增：NFT 合约验证
+    // NFT 合约验证
     mapping(address => bool) public isValidNft;
     
-    // 🔧 新增：统计数据
+    // 统计数据
     uint256 public totalNftsCreated;
 
     struct NftData {
@@ -78,12 +76,6 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
         _;
     }
 
-    // ============ 构造函数 ============
-    
-    /**
-     * @notice 部署工厂合约并创建实现合约
-     * @dev 🔧 改进：优化实现合约部署
-     */
     constructor() {
         // 部署实现合约
         impl = address(new NfinityV2());
@@ -95,7 +87,6 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
     /**
      * @notice 初始化路由地址
      * @param _router 路由合约地址
-     * @dev 🔧 改进：使用 Ownable 代替自定义 manager
      */
     function onlyInitialize(address _router) external onlyOwner {
         if (router != address(0)) revert AlreadyInitialized();
@@ -146,7 +137,6 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
      * @param _name NFT 名称
      * @param _symbol NFT 符号
      * @return 新创建的 NFT 合约地址
-     * @dev 🔧 改进：优化创建流程，改进错误处理
      */
     function preCreate(
         bool _blindBoxOpened,
@@ -187,7 +177,6 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
      * @param _salt 盐值
      * @param _nftData NFT 配置数据
      * @return _nft 新创建的 NFT 合约地址
-     * @dev 🔧 改进：使用 create2 创建所有合约，地址可预测
      */
     function createNft(
         address _owner,
@@ -196,11 +185,9 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
     ) internal nonReentrant returns (address _nft) {
         bytes32 salt = getSalt(_salt);
 
-        // 🔧 使用 cloneDeterministic 创建实现的克隆（已经是 create2）
         address clone = Clones.cloneDeterministic(impl, salt);
         require(clone != address(0), "Clone creation failed");
 
-        // 🔧 使用 create2 创建 ProxyAdmin
         bytes memory proxyAdminBytecode = type(ProxyAdmin).creationCode;
         address _proxyAdmin;
         
@@ -220,7 +207,6 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
             _nftData
         );
 
-        // 🔧 使用 create2 创建 TransparentUpgradeableProxy
         bytes memory proxyBytecode = abi.encodePacked(
             type(TransparentUpgradeableProxy).creationCode,
             abi.encode(clone, _proxyAdmin, initData)
@@ -267,7 +253,6 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
      * @notice 生成盐值
      * @param number 输入数字
      * @return _salt 生成的盐值
-     * @dev 🔧 改进：增强随机性
      */
     function getSalt(uint256 number) internal returns (bytes32 _salt) {
         unchecked {
@@ -279,7 +264,7 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
                 number,
                 block.number,
                 block.timestamp,
-                block.prevrandao,  // 🔧 改进：使用 prevrandao 代替 difficulty
+                block.prevrandao,  // 使用 prevrandao 代替 difficulty
                 address(this),
                 msg.sender,
                 nonce,
@@ -288,7 +273,7 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
         );
     }
 
-    // 🔧 新增：批量查询用户的 NFT 合约
+    // 批量查询用户的 NFT 合约
     function getUserNfts(address _owner, uint256 offset, uint256 limit)
         external
         view
@@ -314,12 +299,12 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
         }
     }
 
-    // 🔧 新增：验证 NFT 合约是否由此工厂创建
+    // 验证 NFT 合约是否由此工厂创建
     function verifyNft(address nft) external view returns (bool) {
         return isValidNft[nft];
     }
 
-    // 🔧 新增：获取工厂统计信息
+    // 获取工厂统计信息
     function getFactoryStats()
         external
         view
@@ -339,7 +324,6 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
      * @notice 预测 ProxyAdmin 地址
      * @param salt 盐值
      * @return 预测的 ProxyAdmin 地址
-     * @dev 🔧 新增：使用 create2 预测地址
      */
     function predictProxyAdminAddress(bytes32 salt) 
         public 
@@ -365,7 +349,6 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
      * @param proxyAdmin ProxyAdmin 地址
      * @param initData 初始化数据
      * @return 预测的 Proxy 地址
-     * @dev 🔧 新增：使用 create2 预测地址
      */
     function predictProxyAddress(
         bytes32 salt,
@@ -392,7 +375,6 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
      * @notice 预测克隆地址
      * @param salt 盐值
      * @return 预测的克隆地址
-     * @dev 🔧 新增：使用 cloneDeterministic 预测地址
      */
     function predictCloneAddress(bytes32 salt) 
         public 
@@ -409,7 +391,6 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
      * @return clone 克隆地址
      * @return proxyAdmin ProxyAdmin 地址
      * @return proxy Proxy 地址（最终 NFT 合约地址）
-     * @dev 🔧 新增：一次性预测所有地址
      */
     function predictNftAddresses(
         uint256 _salt,
