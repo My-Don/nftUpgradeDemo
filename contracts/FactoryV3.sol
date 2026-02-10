@@ -5,7 +5,7 @@ import "./NfinityV2.sol";
 import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
@@ -30,6 +30,11 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
     
     // 统计数据
     uint256 public totalNftsCreated;
+    
+    // 🔧 优化：将 bytecode 存储为内部变量（构造时初始化一次，节省每次调用的 gas）
+    // 注意：ProxyAdmin 和 NfinityV2 是可升级合约，不能用 constant
+    bytes internal PROXY_ADMIN_BYTECODE;
+    bytes internal TRANSPARENT_PROXY_BYTECODE;
 
     struct NftData {
         bool _blindBoxOpened;
@@ -76,7 +81,16 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
         _;
     }
 
-    constructor() {
+    // ============ 构造函数 ============
+    
+    /**
+     * @notice 部署工厂合约并创建实现合约
+     */
+    constructor() Ownable(msg.sender) {
+        // 初始化 bytecode（只在构造时写入一次，节省每次部署的 gas）
+        PROXY_ADMIN_BYTECODE = type(ProxyAdmin).creationCode;
+        TRANSPARENT_PROXY_BYTECODE = type(TransparentUpgradeableProxy).creationCode;
+        
         // 部署实现合约
         impl = address(new NfinityV2());
         if (impl == address(0)) revert ImplementationCreationFailed();
@@ -177,6 +191,7 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
      * @param _salt 盐值
      * @param _nftData NFT 配置数据
      * @return _nft 新创建的 NFT 合约地址
+     * @dev 使用 create2 创建所有合约，地址可预测
      */
     function createNft(
         address _owner,
@@ -185,10 +200,12 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
     ) internal nonReentrant returns (address _nft) {
         bytes32 salt = getSalt(_salt);
 
+        // 使用 cloneDeterministic 创建实现的克隆
         address clone = Clones.cloneDeterministic(impl, salt);
         require(clone != address(0), "Clone creation failed");
 
-        bytes memory proxyAdminBytecode = type(ProxyAdmin).creationCode;
+        // 使用预存储的 bytecode 创建 ProxyAdmin（节省 gas）
+        bytes memory proxyAdminBytecode = PROXY_ADMIN_BYTECODE;
         address _proxyAdmin;
         
         assembly {
@@ -207,8 +224,9 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
             _nftData
         );
 
+        // 使用 constant bytecode 创建 TransparentUpgradeableProxy
         bytes memory proxyBytecode = abi.encodePacked(
-            type(TransparentUpgradeableProxy).creationCode,
+            TRANSPARENT_PROXY_BYTECODE,
             abi.encode(clone, _proxyAdmin, initData)
         );
         
@@ -317,6 +335,26 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
     {
         return (impl, router, totalNftsCreated, nonce);
     }
+    
+    /**
+     * @notice 获取预存储的 bytecode
+     * @return proxyAdminBytecode ProxyAdmin 字节码
+     * @return transparentProxyBytecode TransparentUpgradeableProxy 字节码
+     * @dev 批量获取所有 bytecode
+     */
+    function getAllBytecodes() 
+        external 
+        view 
+        returns (
+            bytes memory proxyAdminBytecode,
+            bytes memory transparentProxyBytecode
+        ) 
+    {
+        return (
+            PROXY_ADMIN_BYTECODE,
+            TRANSPARENT_PROXY_BYTECODE
+        );
+    }
 
     // ============ 地址预测函数 ============
     
@@ -330,13 +368,12 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
         view 
         returns (address) 
     {
-        bytes memory bytecode = type(ProxyAdmin).creationCode;
         bytes32 hash = keccak256(
             abi.encodePacked(
                 bytes1(0xff),
                 address(this),
                 salt,
-                keccak256(bytecode)
+                keccak256(PROXY_ADMIN_BYTECODE)
             )
         );
         return address(uint160(uint256(hash)));
@@ -357,7 +394,7 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
         bytes memory initData
     ) public view returns (address) {
         bytes memory bytecode = abi.encodePacked(
-            type(TransparentUpgradeableProxy).creationCode,
+            TRANSPARENT_PROXY_BYTECODE,
             abi.encode(clone, proxyAdmin, initData)
         );
         bytes32 hash = keccak256(
@@ -375,6 +412,7 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
      * @notice 预测克隆地址
      * @param salt 盐值
      * @return 预测的克隆地址
+     * @dev 使用 cloneDeterministic 预测地址
      */
     function predictCloneAddress(bytes32 salt) 
         public 
@@ -391,6 +429,7 @@ contract FactoryV3 is ReentrancyGuard, Ownable {
      * @return clone 克隆地址
      * @return proxyAdmin ProxyAdmin 地址
      * @return proxy Proxy 地址（最终 NFT 合约地址）
+     * @dev 一次性预测所有地址
      */
     function predictNftAddresses(
         uint256 _salt,
